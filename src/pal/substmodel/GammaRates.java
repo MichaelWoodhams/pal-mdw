@@ -117,6 +117,7 @@ public class GammaRates extends RateDistribution
 
 	private void makeGamma(double a)
 	{
+		a = Math.max(a, 0.001); // a=0 causes a variety of errors
 		double mean = 0.0;
 		for (int i = 0; i < numRates; i++)
 		{
