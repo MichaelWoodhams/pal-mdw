@@ -1,0 +1,320 @@
+#LyX 2.0.0beta3 created this file. For more info see http://www.lyx.org/
+\lyxformat 410
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\use_mhchem 1
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+GeneralLinearRateMatrix
+\end_layout
+
+\begin_layout Title
+Design for modifications to PAL library
+\end_layout
+
+\begin_layout Author
+Michael Woodhams
+\end_layout
+
+\begin_layout Date
+16 May 2011
+\end_layout
+
+\begin_layout Section*
+Introduction
+\end_layout
+
+\begin_layout Standard
+The (currenly unpublished) paper 
+\begin_inset Quotes eld
+\end_inset
+
+Lie Markov Models
+\begin_inset Quotes erd
+\end_inset
+
+ by Jesús Fernández-S anchez , Peter Jarvis, and Jeremy Sumner uses models
+ where the instantaneous rate matrix 
+\begin_inset Formula $Q$
+\end_inset
+
+ is a linear combination of basis matrices, with the model free parameters
+ being the weights on those basis matrices.
+ This alteration is to implement such models in PAL in a general fasion.
+ We aim to provide a RateMatrixHandler object which wraps such a model,
+ with as much compatibility as possible to current code.
+\end_layout
+
+\begin_layout Section*
+Current situation
+\end_layout
+
+\begin_layout Standard
+The NeoRateMatrix (NRM) interface provides a stateless object (i.e.
+ does NOT hold model parameters) describing a Markov model.
+ In what may be a design error in PAL, it is intended to return relative
+ rates which then must be further modified in RateMatrixHandler (RMH) by
+ the model equilibrium frequencies.
+\end_layout
+
+\begin_layout Standard
+The RMH class wraps a NRM and holds the model parameters as state, and provides
+ Markov matrices for a given distance (via matrix exponentials.) RMH provides
+ the following public interface/services:
+\end_layout
+
+\begin_layout Itemize
+Constructors, with arguments base NRM, and optionally equilibrium freq and
+ whether equilibrium freqs are model parameters.
+\end_layout
+
+\begin_layout Itemize
+getCopy()
+\end_layout
+
+\begin_layout Itemize
+double [] getEquilbriumFrequencies()
+\end_layout
+
+\begin_layout Itemize
+boolean getFixedFrequencies()
+\end_layout
+
+\begin_layout Itemize
+getRateMatrix(...)
+\end_layout
+
+\begin_layout Itemize
+getTransitionProbabilities[Transpose](...)
+\end_layout
+
+\begin_layout Itemize
+stuff for the Parameterized interface - get/set params, bounds on params,
+ etc.
+\end_layout
+
+\begin_layout Section*
+Overview of changes
+\end_layout
+
+\begin_layout Standard
+A GeneralLinearRateMatrix cannot handle equilibrium frequencies in the way
+ that PAL does currently with NRM and RMH - the relationship between rate
+ matrix entries and equilibrium frequencies is too complex.
+ So a RMH needs to know whether its NRM is suitable for application of posterior
+ equilibrium frequencies or not.
+ So main changes are:
+\end_layout
+
+\begin_layout Itemize
+New class GeneralLinearRateMatrix implements NeoRateMatrix
+\end_layout
+
+\begin_layout Itemize
+NeoRateMatrix method to say whether to use equilibrium frequencies
+\end_layout
+
+\begin_layout Itemize
+RMH skips equilibrium frequency munging if NRM says to.
+\end_layout
+
+\begin_layout Itemize
+RMH's getEquilibriumFrequencies provides eigenvector if eq.
+ freq.s not parameters.
+\end_layout
+
+\begin_layout Section*
+Detailed(ish) Design:
+\end_layout
+
+\begin_layout Subsection*
+Interface NeoRateMatrix
+\end_layout
+
+\begin_layout Standard
+Currently implemented by GeneralPoissonRateMatrix and GeneralREVRateMatrix.
+ 
+\end_layout
+
+\begin_layout Itemize
+New method boolean independentOfEqbmFreqs() - returns 'true' for current
+ classes
+\end_layout
+
+\begin_layout Subsection*
+RateMatrixHandler
+\end_layout
+
+\begin_layout Itemize
+Constructor RateMatrixHandler(NeoRateMatrix): becomes the base constructor.
+ Sets equilibriumBaseFrequencies_ to even, in other ways acts as if fixedFrequen
+cies is true.
+\end_layout
+
+\begin_layout Itemize
+Constructor RateMatrixHandler(NeoRateMatrix, double[], boolean) calls base
+ constructor and then modifies equilibriumFrequencies_, fixedFrequencies_,
+ firstFrequencyParameter_, nParameters_ as requd.
+\end_layout
+
+\begin_layout Itemize
+double[] getEquilibriumFrequencies(): checkMatrix() more often.
+ 
+\end_layout
+
+\begin_layout Itemize
+checkMatrix(): if RMH.independentOfEqbmFreqs(), proceed as now.
+ Otherwise, use RMH.createRelativeRates() to directly populate qMatrixStore_,
+ and scale it so diagonal sums to dimension_ and set equilibriumFrequencies
+ from the EigenSystem.
+\end_layout
+
+\begin_layout Itemize
+fromQToR, makeValid need no changes as they aren't called in the new case.
+\end_layout
+
+\begin_layout Itemize
+remove checkFrequencies() as it is redundant independent of this design.
+\end_layout
+
+\begin_layout Standard
+Note: I think better to have NRM have a 'getNormalizedQMatrix' method and
+ put the 'fromQToR' etc.
+ into NRM instead, but I'm too lazy to change this.
+\end_layout
+
+\begin_layout Subsection*
+Class GeneralLinearRateMatrix implements NeoRateMatrix
+\end_layout
+
+\begin_layout Standard
+Basically we provide a set of basis matrices.
+ Optionally one can be singled out as the 'constant' basis matrix - this
+ is always included with weight 1.
+ If we chose not to do this, we'll have an arbitrary scaling.
+ (Possible future expansion - think of different ways of avoiding this.)
+ 
+\end_layout
+
+\begin_layout Itemize
+private final double[][][] basis_; 
+\end_layout
+
+\begin_layout Itemize
+private final int nParameters_; 
+\end_layout
+
+\begin_layout Itemize
+private final double[][] constant_; 
+\end_layout
+
+\begin_layout Itemize
+private final double[] defaultParameters_; 
+\end_layout
+
+\begin_layout Itemize
+private final int dimension_; 
+\end_layout
+
+\begin_layout Itemize
+private final double[] upperBounds_;
+\end_layout
+
+\begin_layout Itemize
+Constructor GeneralLinearRateMatrix(int dimension, double[][] constant,
+ double[][][] basis)
+\end_layout
+
+\begin_layout Itemize
+createRelativeRates(...) forms the weighted sum of the basis matrices
+\end_layout
+
+\begin_layout Itemize
+setUpperBounds(double[]) sets bound on the parameters.
+ (Lower bounds are 0).
+ 
+\end_layout
+
+\begin_layout Itemize
+isReversible() returns false.
+ (Maybe one day allow special cases which are known to be reversible)
+\end_layout
+
+\begin_layout Itemize
+static GeneralLinearRateMatrix getK3ST_F81(): returns a GLRM for the K3ST/F81
+ model.
+ 
+\end_layout
+
+\begin_layout Section*
+Testing
+\end_layout
+
+\begin_layout Standard
+Prior to making changes, create an arbitrary GTR model (to exercise GeneralREVRa
+teMatrix class) and a dimension 4 GeneralPoisonRateMatrix.
+ Apply arbitrary equilibrium frequencies to each, specify an arbitrary branch
+ length, and get the Markov matrix.
+ Output these two matrices.
+\end_layout
+
+\begin_layout Standard
+Create RateMatrixHandler.test() method which redoes those calculations and
+ compares the results to the known good results.
+\end_layout
+
+\end_body
+\end_document
